@@ -1,6 +1,19 @@
-from backend.services.exceptions import LLMServiceError
+from backend.services.exceptions import (
+    SearchRequestError,
+    FetchRequestError,
+    HTMLCleaningError,
+)
 
-try:
-    raise LLMServiceError("Test error")
-except LLMServiceError as e:
-    print(e)
+errors = [
+    SearchRequestError("Search failed"),
+    FetchRequestError("Could not fetch webpage"),
+    HTMLCleaningError("Cleaner failed"),
+]
+
+for error in errors:
+    try:
+        raise error
+    except Exception as e:
+        print(type(e).__name__)
+        print(e)
+        print("-" * 40)
