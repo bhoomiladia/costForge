@@ -1,8 +1,8 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from backend.models.base_schema import BaseSchema
 
-class LLMResponse(BaseModel):
+class LLMResponse(BaseSchema):
     """
     Standard response returned by every local LLM call.
     """

@@ -1,8 +1,9 @@
 from typing import Optional
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import HttpUrl
+from backend.models.base_schema import BaseSchema
 
-class SearchResult(BaseModel):
+class SearchResult(BaseSchema):
     """
     Represents a single search result returned by a web search provider.
     """

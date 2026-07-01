@@ -1,8 +1,9 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import  Field
+from backend.models.base_schema import BaseSchema
 
-class Component(BaseModel):
+class Component(BaseSchema):
     """
     Represents a single physical component of a product.
     """

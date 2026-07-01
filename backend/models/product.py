@@ -1,6 +1,7 @@
 from typing import List, Optional
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import Field
+from backend.models.base_schema import BaseSchema
 
 
 class ProductCategory(str, Enum):
@@ -15,7 +16,7 @@ class ProductCategory(str, Enum):
     CAMERA = "Camera"
     OTHER = "Other"
 
-class Product(BaseModel):
+class Product(BaseSchema):
     """
     Canonical representation of a discovered product.
     This model is only responsible for storing product metadata.

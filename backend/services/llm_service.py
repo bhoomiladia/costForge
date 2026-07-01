@@ -57,34 +57,28 @@ class LLMService:
         except requests.RequestException:
             return False
     def generate(
-    self,
-    prompt: str,
-    system_prompt: Optional[str] = None,
-    model: Optional[str] = None,
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-) -> LLMResponse:
+        self,
+        messages: list[dict[str, str]],
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> LLMResponse:
         """
-        Send a prompt to the local LLM and return its response.
+        Send chat messages to the local LLM and return the response.
         """
-
-        messages = []
-
-        if system_prompt:
-            messages.append({
-                "role": "system",
-                "content": system_prompt
-            })
-
-        messages.append({
-            "role": "user",
-            "content": prompt
-        })
 
         payload = {
             "messages": messages,
-            "temperature": temperature if temperature is not None else self.temperature,
-            "max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
+            "temperature": (
+                temperature
+                if temperature is not None
+                else self.temperature
+            ),
+            "max_tokens": (
+                max_tokens
+                if max_tokens is not None
+                else self.max_tokens
+            ),
         }
 
         selected_model = model if model is not None else self.model
@@ -127,12 +121,21 @@ class LLMService:
                 "LM Studio returned an invalid JSON response."
             )
 
-        message = data["choices"][0]["message"]
+        try:
+            message = data["choices"][0]["message"]
+        except (KeyError, IndexError):
+            raise LLMServiceError(
+                "Invalid response format returned by the LLM."
+            )
         usage = data.get("usage", {})
+        reasoning = message.get("reasoning_content")
+
+        if reasoning:
+            reasoning = reasoning.strip()
 
         return LLMResponse(
             content=message.get("content", "").strip(),
-            reasoning=message.get("reasoning_content"),
+            reasoning=reasoning,
             model=data.get("model", "unknown"),
             finish_reason=data["choices"][0].get("finish_reason", "unknown"),
             prompt_tokens=usage.get("prompt_tokens", 0),

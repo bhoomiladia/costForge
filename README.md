@@ -1,357 +1,471 @@
-# SQS - Smart Quote System
+# Smart Query Search (SQS)
 
-> **AI-powered Should-Cost Estimation Engine** built using modular services, local LLMs, and evidence-based web extraction.
-
-> **Project Status:** 🚧 Phase 2 (Evidence Collection)
+A modular AI-powered backend that discovers product information from the web, extracts structured specifications using a local LLM, and merges information from multiple sources into a single reliable product profile.
 
 ---
 
-# Overview
+# Architecture
 
-SQS is an AI-powered backend that estimates the manufacturing cost of electronic products by collecting evidence from the web instead of relying on an LLM's internal knowledge.
-
-The system follows an **evidence-first architecture**:
-
-1. Search for trusted sources.
-2. Fetch real webpages.
-3. Clean webpage content.
-4. Extract structured specifications using local LLMs.
-5. Identify hardware components.
-6. Estimate component prices from multiple sources.
-7. Aggregate estimates using statistical consensus.
-
-The LLM is **never responsible for inventing information**—it only reasons over collected evidence.
+```text
+                        ProductPipeline
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+ WebSearchService      PageFetchService        HTMLCleaner
+        │                      │
+        ▼                      ▼
+ SearchProvider          RequestsFetcher
+        │                      │
+        ▼                      ▼
+  SearchResult[]          WebPage[]
+                               │
+                               ▼
+                        Clean HTML Text
+                               │
+                               ▼
+                        ContentTrimmer
+                               │
+                               ▼
+                         Relevant Text
+                               │
+                               ▼
+                  SpecificationExtractor
+                    ├── PromptBuilder
+                    ├── LLMService
+                    └── ResponseParser
+                               │
+                               ▼
+                 ProductSpecifications[]
+                               │
+                               ▼
+                  SpecificationMerger
+                               │
+                               ▼
+                Final ProductSpecifications
+```
 
 ---
 
-# Current Architecture
+# Pipeline Flow
 
 ```mermaid
 flowchart TD
 
-A[Product Name]
---> B[WebSearchService]
+A[User Query] --> B[WebSearchService]
 
-B --> C[SerperProvider]
-
+B --> C[Search Provider]
 C --> D[Search Results]
 
-D --> E[RequestsFetcher]
+D --> E[PageFetchService]
+E --> F[RequestsFetcher]
+F --> G[Web Pages]
 
-E --> F[WebPage Model]
+G --> H[HTMLCleaner]
+H --> I[Clean Text]
 
-F --> G[HTMLCleaner]
+I --> J[ContentTrimmer]
+J --> K[Relevant Product Content]
 
-G --> H["Clean Text (Next Phase)"]
+K --> L[SpecificationExtractor]
+
+L --> M[PromptBuilder]
+M --> N[LLMService]
+N --> O[Local LLM]
+O --> P[ResponseParser]
+
+P --> Q[ProductSpecifications]
+
+Q --> R[SpecificationMerger]
+
+R --> S[Final ProductSpecifications]
 ```
 
 ---
 
-# Overall Project Pipeline
-
-```mermaid
-flowchart TD
-
-A[Product Name]
-
-A --> B[Web Search]
-
-B --> C[Fetch Webpages]
-
-C --> D[Clean HTML]
-
-D --> E[Specification Extraction<br/>Local LLM]
-
-E --> F[Component Identification]
-
-F --> G[Component Price Collection]
-
-G --> H[LLM Cost Verification]
-
-H --> I[Consensus Engine]
-
-I --> J[Final Should-Cost Report]
-```
-
----
-
-# Design Philosophy
-
-The project follows a layered architecture.
-
-```
-Models
-    ↓
-Services
-    ↓
-Pipelines
-    ↓
-Application
-```
-
-Each layer has a single responsibility.
-
-* **Models** represent structured data.
-* **Services** perform reusable operations.
-* **Pipelines** orchestrate business logic.
-* **Application** exposes APIs/UI.
-
----
-
-# Repository Structure
+# Project Structure
 
 ```text
 backend/
 │
-├── models/
-│   ├── component.py
-│   ├── llm_response.py
-│   ├── product.py
-│   ├── product_specifications.py
-│   ├── search_result.py
-│   └── web_page.py
+├── pipeline/
+│   └── product_pipeline.py
 │
 ├── services/
-│   ├── llm_service.py
-│   ├── exceptions.py
-│   │
 │   ├── search/
-│   │   ├── web_search_service.py
-│   │   └── providers/
-│   │       ├── base_provider.py
-│   │       ├── serper_provider.py
-│   │       ├── tavily_provider.py
-│   │       └── brave_provider.py
-│   │
 │   ├── fetch/
-│   │   ├── page_fetch_service.py
-│   │   └── fetchers/
-│   │       ├── base_fetcher.py
-│   │       └── requests_fetcher.py
-│   │
-│   └── cleaner/
-│       └── html_cleaner.py
+│   ├── cleaner/
+│   ├── trimmer/
+│   ├── extraction/
+│   └── llm_service.py
 │
-└── tests/
+├── models/
+│
+├── tests/
+│
+└── routes/
 ```
 
 ---
 
-# Current Workflow
+# Service Responsibilities
 
-## 1. Product Search
+## ProductPipeline
 
-The search layer accepts a product name and retrieves relevant webpages.
+Coordinates the complete workflow.
 
-```
-Product Name
-      ↓
-WebSearchService
-      ↓
-Search Provider
-      ↓
-SearchResult[]
-```
+Responsibilities:
 
-Supported architecture:
+* Search the web
+* Fetch webpages
+* Clean HTML
+* Trim irrelevant content
+* Extract structured specifications
+* Merge information from multiple pages
+
+The pipeline contains orchestration logic only and does not implement business logic.
+
+---
+
+## WebSearchService
+
+High-level search service.
+
+Responsibilities:
+
+* Execute product searches
+* Delegate searching to a provider
+* Return normalized SearchResult objects
+
+Current provider:
 
 * Serper
-* Tavily *(planned)*
-* Brave *(planned)*
+
+Future providers:
+
+* Brave Search
+* Tavily
+* Bing
+* Google Custom Search
 
 ---
 
-## 2. Webpage Fetching
+## Search Providers
 
-Each search result is downloaded as raw HTML.
+Responsible for communicating with external search APIs.
 
-```
-SearchResult
-      ↓
-RequestsFetcher
-      ↓
-WebPage
-```
+Each provider converts API responses into a common SearchResult model.
 
-The original HTML is preserved for future processing.
+This allows providers to be swapped without affecting the rest of the application.
 
 ---
 
-## 3. HTML Cleaning *(In Progress)*
+## PageFetchService
 
-Raw webpages are cleaned before being sent to the LLM.
+Downloads webpages from search results.
 
-The cleaner removes:
+Responsibilities:
 
-* JavaScript
-* CSS
-* Hidden elements
-* HTML tags
-* Excess whitespace
+* Skip unsupported domains
+* Fetch pages
+* Handle HTTP failures
+* Return WebPage objects
 
-Result:
+Currently uses:
 
-```
+* RequestsFetcher
+
+Future:
+
+* PlaywrightFetcher
+* SeleniumFetcher
+
+---
+
+## RequestsFetcher
+
+Low-level HTTP fetcher.
+
+Responsibilities:
+
+* Download webpage HTML
+* Configure request headers
+* Return raw HTML
+
+No parsing or cleaning occurs here.
+
+---
+
+## HTMLCleaner
+
+Converts raw HTML into readable text.
+
+Responsibilities:
+
+* Remove scripts
+* Remove styles
+* Remove comments
+* Remove invisible elements
+* Normalize whitespace
+
+Input:
+
 Raw HTML
-      ↓
-HTMLCleaner
-      ↓
-Clean Text
+
+Output:
+
+Clean text
+
+---
+
+## ContentTrimmer
+
+Filters out irrelevant content before sending text to the LLM.
+
+Responsibilities:
+
+* Keep specification-rich lines
+* Remove navigation
+* Remove policies
+* Remove shopping boilerplate
+* Preserve nearby context
+
+This dramatically reduces token usage.
+
+---
+
+## SpecificationExtractor
+
+Converts trimmed text into structured product data.
+
+Internally coordinates:
+
+* PromptBuilder
+* LLMService
+* ResponseParser
+
+Returns:
+
+ProductSpecifications
+
+---
+
+## PromptBuilder
+
+Creates structured prompts for the LLM.
+
+Responsibilities:
+
+* Build system prompt
+* Build user prompt
+* Inject product name
+* Inject cleaned content
+
+---
+
+## LLMService
+
+Communicates with the local LLM through LM Studio.
+
+Responsibilities:
+
+* Send prompts
+* Handle API requests
+* Parse responses
+* Return LLMResponse
+
+Supports dependency injection for future model providers.
+
+---
+
+## ResponseParser
+
+Converts LLM JSON into ProductSpecifications.
+
+Responsibilities:
+
+* Validate JSON
+* Parse structured output
+* Raise parsing errors
+* Return strongly typed models
+
+---
+
+## SpecificationMerger
+
+Combines multiple ProductSpecifications into one.
+
+Current merge strategy:
+
+* First non-empty scalar wins
+* Merge list fields
+* Remove duplicates
+* Preserve order
+
+Example:
+
+Page 1
+
+```
+Battery = 55 Wh
+Ports = [USB-C]
+```
+
+Page 2
+
+```
+Display = OLED
+Ports = [Thunderbolt 4]
+```
+
+Merged
+
+```
+Battery = 55 Wh
+Display = OLED
+Ports = [USB-C, Thunderbolt 4]
 ```
 
 ---
 
-# Local LLMs
+# Core Models
 
-The project is designed around locally hosted language models.
+## SearchResult
 
-Current development targets include:
+Represents a search engine result.
 
-* Qwen 3 8B
-* DeepSeek R1 Distill
-* GLM 4.5 Air
+Contains:
 
-The LLMs are responsible for:
-
-* extracting specifications
-* identifying components
-* verifying extracted prices
-
-They **do not search the web** or generate unsupported facts.
+* title
+* url
+* snippet
+* source_domain
 
 ---
 
-# Core Principles
+## WebPage
 
-## Evidence First
+Represents a downloaded webpage.
 
-Every estimation must originate from collected evidence.
+Contains:
 
-```
-Search
-    ↓
-Fetch
-    ↓
-Clean
-    ↓
-LLM
-```
+* url
+* title
+* source_domain
+* html
 
 ---
 
-## Modular Services
+## ProductSpecifications
 
-Each service performs exactly one task.
+Structured representation of extracted product information.
 
-```
-Search
+Examples:
 
-Fetch
-
-Clean
-
-Extract
-
-Price
-
-Consensus
-```
+* Processor
+* Memory
+* Storage
+* Battery
+* Display
+* Weight
+* Ports
+* Colors
+* Special Features
 
 ---
 
-## Provider Abstraction
+## LLMResponse
 
-External integrations are abstracted.
+Represents a raw response returned by the LLM.
 
-```
-WebSearchService
-        │
-        ├── Serper
-        ├── Tavily
-        └── Brave
-```
+Includes:
 
-The application never depends directly on a provider implementation.
+* content
+* reasoning
+* model
+* token usage
+* finish reason
 
 ---
 
-## Local AI
+# Design Principles
 
-No cloud LLM APIs are required.
+The project follows several software engineering principles:
 
-The system is designed to run completely offline after evidence collection.
-
----
-
-# Roadmap
-
-## ✅ Phase 1
-
-* Project architecture
-* Domain models
-* LM Studio integration
-* Search provider abstraction
-* Serper integration
-* Web search service
-* Page fetching
-
----
-
-## 🚧 Phase 2
-
-* HTML cleaner
-* Content trimming
-* Page processing
-
----
-
-## 📅 Phase 3
-
-* Specification extraction
-* Structured outputs
-* Product specification models
-
----
-
-## 📅 Phase 4
-
-* Component identification
-* Hardware decomposition
-
----
-
-## 📅 Phase 5
-
-* Component price discovery
-* Multi-source evidence collection
-
----
-
-## 📅 Phase 6
-
-* Multi-LLM verification
-* DBSCAN consensus
-* Outlier removal
-
----
-
-## 📅 Phase 7
-
-* SQLite storage
-* Excel export
-* REST API
-* Frontend integration
-
----
-
-# Long-Term Vision
-
-The goal is to build a fully explainable AI system capable of generating manufacturing should-cost estimates using:
-
-* Evidence-driven reasoning
-* Local open-source language models
+* Dependency Injection
+* Single Responsibility Principle
+* Interface-based design
+* Separation of concerns
 * Modular architecture
-* Statistical validation
-* Transparent cost attribution
+* Strong typing with Pydantic
+* Testable services
+* Provider abstraction
 
-Rather than asking an LLM for costs, SQS constructs a verifiable evidence pipeline and produces cost estimates supported by multiple independent sources.
+---
+
+# Current Status
+
+## Completed
+
+* Search abstraction
+* Search providers
+* Page fetching
+* HTML cleaning
+* Content trimming
+* Prompt generation
+* Local LLM integration
+* JSON response parsing
+* Specification extraction
+* Specification merging
+* End-to-end pipeline
+* Unit tests for all major services
+
+---
+
+# Planned Improvements
+
+* Playwright-based fetcher for JavaScript-heavy websites
+* Retry and backoff policies
+* Request caching
+* Source confidence scoring
+* Field-level provenance
+* Async pipeline execution
+* Parallel page fetching
+* REST API endpoints
+* Persistent database storage
+* Evaluation and benchmarking
+* Logging and observability
+* Multi-provider search fallback
+* Multi-model LLM support
+
+---
+
+# Example End-to-End Flow
+
+```text
+User Query
+      │
+      ▼
+Search
+      │
+      ▼
+Fetch Web Pages
+      │
+      ▼
+Clean HTML
+      │
+      ▼
+Trim Relevant Content
+      │
+      ▼
+LLM Extraction
+      │
+      ▼
+Structured Specifications
+      │
+      ▼
+Merge Results
+      │
+      ▼
+Final ProductSpecifications
+```
